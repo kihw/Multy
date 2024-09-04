@@ -6,7 +6,6 @@ import (
 	_ "github.com/kihw/multy/docs"
 	"github.com/kihw/multy/handlers"
 	"github.com/kihw/multy/routes"
-
 	"github.com/kihw/multy/services"
 
 	"github.com/gin-gonic/gin"
