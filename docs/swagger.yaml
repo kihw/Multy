@@ -1,0 +1,178 @@
+basePath: /
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is a sample server for managing shortcuts.
+  termsOfService: http://swagger.io/terms/
+  title: Multy API
+  version: "1.0"
+paths:
+  /StartTurn/start:
+    post:
+      description: Démarre la détection des messages StartTurn
+      responses:
+        "200":
+          description: StartTurn detection started
+          schema:
+            type: string
+        "500":
+          description: Failed to start StartTurn detection
+          schema:
+            type: string
+      summary: Démarrer la détection du StartTurn
+      tags:
+      - Start Turn
+  /StartTurn/stop:
+    post:
+      description: Arrête la détection des messages StartTurn
+      responses:
+        "200":
+          description: StartTurn detection stopped
+          schema:
+            type: string
+        "500":
+          description: Failed to stop StartTurn detection
+          schema:
+            type: string
+      summary: Arrêter la détection du StartTurn
+      tags:
+      - Start Turn
+  /focus/{keyword}:
+    post:
+      description: Met en avant une fenêtre qui contient un mot-clé spécifique dans
+        son titre
+      parameters:
+      - description: Mot-clé pour identifier la fenêtre
+        in: path
+        name: keyword
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Fenêtre mise en avant avec succès
+          schema:
+            type: string
+        "500":
+          description: Erreur lors de la mise en avant de la fenêtre
+          schema:
+            type: string
+      summary: Met en avant une fenêtre spécifique
+      tags:
+      - Windows
+  /shortcut/register/{key}/{windowName}:
+    post:
+      consumes:
+      - application/json
+      description: Registers a hotkey to focus on a window
+      parameters:
+      - description: Key to register
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: Name of the window to focus
+        in: path
+        name: windowName
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a hotkey
+      tags:
+      - Shortcut
+  /shortcut/unregister:
+    delete:
+      description: Unregisters a previously registered keyboard shortcut
+      responses:
+        "200":
+          description: Raccourci désenregistré avec succès
+          schema:
+            type: string
+        "500":
+          description: Failed to unregister shortcut
+          schema:
+            type: string
+      summary: Unregister an existing hotkey
+      tags:
+      - Shortcut
+  /wheelclick/start:
+    post:
+      description: Listens for middle mouse clicks and triggers click simulation on
+        Dofus windows.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Start middle mouse click detection
+      tags:
+      - WheelClick
+  /wheelclick/stop:
+    post:
+      description: Stops the detection of middle mouse clicks.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stop middle mouse click detection
+      tags:
+      - WheelClick
+  /windows:
+    get:
+      description: Obtient la liste des fenêtres actuellement ouvertes sur le système
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Liste des fenêtres ouvertes
+          schema:
+            items:
+              type: string
+            type: array
+        "500":
+          description: Erreur lors de la récupération des fenêtres
+          schema:
+            type: string
+      summary: Retourne la liste des fenêtres ouvertes
+      tags:
+      - Windows
+swagger: "2.0"
