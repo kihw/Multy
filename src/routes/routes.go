@@ -3,9 +3,9 @@ package routes
 import (
 	"net/http"
 
-	"github.com/kihw/multy/services"
+	"github.com/kihw/multy/src/services"
 
-	"github.com/kihw/multy/handlers"
+	"github.com/kihw/multy/src/handlers"
 
 	"github.com/gin-gonic/gin"
 )
@@ -45,6 +45,6 @@ func SetupWheelClickRoutes(r *gin.Engine, wh *handlers.WheelClickHandler) {
 }
 
 func SetupStartTurnServiceRoutes(r *gin.Engine, handler *handlers.StartTurnServiceHandler) {
-    r.POST("/StartTurn/start", handler.Start)
-    r.POST("/StartTurn/stop", handler.Stop)
+	r.POST("/StartTurn/start", handler.Start)
+	r.POST("/StartTurn/stop", handler.Stop)
 }

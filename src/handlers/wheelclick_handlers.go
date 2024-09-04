@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/kihw/multy/services"
+	"github.com/kihw/multy/src/services"
 
 	"github.com/gin-gonic/gin"
 )

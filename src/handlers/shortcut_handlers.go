@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kihw/multy/services"
+	"github.com/kihw/multy/src/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,25 +24,24 @@ type HandlersService struct {
 // @Failure 500 {object} map[string]string
 // @Router /shortcut/register/{key}/{windowName} [post]
 func (hs *HandlersService) RegisterHotKeyHandler(c *gin.Context) {
-    key := c.Param("key")
-    windowName := c.Param("windowName") // This should come from the request
+	key := c.Param("key")
+	windowName := c.Param("windowName") // This should come from the request
 
-    shortcut := services.Shortcut{
-        ID:         hs.ShortcutService.GenerateHotkeyID(),
-        Key:        key,
-        WindowName: windowName, // Set the window name here
-    }
+	shortcut := services.Shortcut{
+		ID:         hs.ShortcutService.GenerateHotkeyID(),
+		Key:        key,
+		WindowName: windowName, // Set the window name here
+	}
 
-    err := hs.ShortcutService.RegisterShortcut(shortcut)
-    if err != nil {
-        log.Printf("Error registering shortcut: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
+	err := hs.ShortcutService.RegisterShortcut(shortcut)
+	if err != nil {
+		log.Printf("Error registering shortcut: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Shortcut registered successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Shortcut registered successfully"})
 }
-
 
 // UnregisterHotKeyHandler handles the unregistration of an existing hotkey.
 // @Summary Unregister an existing hotkey

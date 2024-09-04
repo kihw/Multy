@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	_ "github.com/kihw/multy/docs"
-	"github.com/kihw/multy/handlers"
-	"github.com/kihw/multy/routes"
-	"github.com/kihw/multy/services"
+	_ "github.com/kihw/multy/src/docs"
+	"github.com/kihw/multy/src/handlers"
+	"github.com/kihw/multy/src/routes"
+	"github.com/kihw/multy/src/services"
 
 	"github.com/gin-gonic/gin"
 	swagFiles "github.com/swaggo/files"
@@ -23,40 +23,39 @@ import (
 // @host localhost:8080
 // @BasePath /
 func main() {
-    r := gin.Default()
+	r := gin.Default()
 
+	// Initialize services.
+	wheelClickService := &services.WheelClickService{}
+	shortcutService := services.NewShortcutService()
+	windowService := &services.WindowService{}
+	startTurnService := services.NewStartTurnService(windowService)
 
-    // Initialize services.
-    wheelClickService := &services.WheelClickService{}
-    shortcutService := services.NewShortcutService()
-    windowService := &services.WindowService{}
-    startTurnService := services.NewStartTurnService(windowService)
+	// Initialize handlers with their respective services.
+	wheelClickHandler := &handlers.WheelClickHandler{
+		WheelClickService: wheelClickService,
+	}
+	handlersService := &handlers.HandlersService{
+		ShortcutService: shortcutService,
+	}
+	startTurnServiceHandler := handlers.NewStartTurnServiceHandler(startTurnService)
 
-    // Initialize handlers with their respective services.
-    wheelClickHandler := &handlers.WheelClickHandler{
-        WheelClickService: wheelClickService,
-    }
-    handlersService := &handlers.HandlersService{
-        ShortcutService: shortcutService,
-    }
-    startTurnServiceHandler := handlers.NewStartTurnServiceHandler(startTurnService)
+	// Log open windows for debugging.
+	windows, err := windowService.GetWindows()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Open windows:", windows)
 
-    // Log open windows for debugging.
-    windows, err := windowService.GetWindows()
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Println("Open windows:", windows)
+	// Configure routes with respective handlers.
+	routes.SetupShortcutRoutes(r, handlersService)
+	routes.SetupWindowRoutes(r, windowService)
+	routes.SetupWheelClickRoutes(r, wheelClickHandler)
+	routes.SetupStartTurnServiceRoutes(r, startTurnServiceHandler)
 
-    // Configure routes with respective handlers.
-    routes.SetupShortcutRoutes(r, handlersService)
-    routes.SetupWindowRoutes(r, windowService)
-    routes.SetupWheelClickRoutes(r, wheelClickHandler)
-    routes.SetupStartTurnServiceRoutes(r, startTurnServiceHandler)
+	// Swagger route for API documentation.
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swagFiles.Handler))
 
-    // Swagger route for API documentation.
-    r.GET("/swagger/*any", ginSwagger.WrapHandler(swagFiles.Handler))
-
-    // Start the server on port 8080.
-    r.Run(":8080")
+	// Start the server on port 8080.
+	r.Run(":8080")
 }
