@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  go-backend-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-backend-app
+    ports:
+      - '8080:8080'
+    networks:
+      - backend-network
+    environment:
+      - GIN_MODE=release
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+networks:
+  backend-network:
+    driver: bridge

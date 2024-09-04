@@ -7,26 +7,25 @@ import (
 	"time"
 	"unsafe"
 
-	hook "github.com/robotn/gohook"
+	"github.com/go-vgo/robotgo"
 )
 
 const (
-	WM_LBUTTONDOWN = 0x0201
-	WM_LBUTTONUP   = 0x0202
-	VK_MBUTTON     = 0x04 // Virtual key code for middle mouse button
+    WM_LBUTTONDOWN = 0x0201
+    WM_LBUTTONUP   = 0x0202
+    VK_MBUTTON     = 0x04 // Virtual key code for middle mouse button
 )
 
 type WheelClickService struct {
-	stopChan chan struct{}
+    stopChan chan struct{}
 }
 
-
+// GetCursorPos gets the current position of the cursor.
 func GetCursorPos() (int, int) {
-    var pt Point
-    procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
-    return int(pt.X), int(pt.Y)
+    return robotgo.GetMousePos()
 }
 
+// ConvertScreenToClient converts screen coordinates to client coordinates.
 func ConvertScreenToClient(hWnd syscall.Handle, x, y int) (int, int) {
     var point struct {
         X, Y int32
@@ -42,6 +41,7 @@ func ConvertScreenToClient(hWnd syscall.Handle, x, y int) (int, int) {
     return int(point.X), int(point.Y)
 }
 
+// SimulateClick simulates a mouse click.
 func SimulateClick(hWnd syscall.Handle, x, y int) {
     // Mettre la fenêtre au premier plan
     procSetForegroundWindow.Call(uintptr(hWnd))
@@ -49,18 +49,8 @@ func SimulateClick(hWnd syscall.Handle, x, y int) {
     // Convertir les coordonnées d'écran en coordonnées client
     clientX, clientY := ConvertScreenToClient(hWnd, x, y)
 
-    // Journaliser les coordonnées utilisées pour définir la position du curseur
-    log.Printf("Définir la position du curseur à : X=%d, Y=%d", x, y)
-
-    // Définir la position du curseur
-    ret, _, _ := procSetCursorPos.Call(uintptr(x), uintptr(y))
-    if ret == 0 {
-        log.Printf("Échec de la définition de la position du curseur à : X=%d, Y=%d", x, y)
-    }
-
-    // Vérifier la position actuelle du curseur
-    actualX, actualY := GetCursorPos()
-    log.Printf("Position actuelle du curseur après la définition : X=%d, Y=%d", actualX, actualY)
+    // Définir la position du curseur avec robotgo
+    robotgo.MoveMouse(x, y)
 
     // Introduire un léger délai pour s'assurer que le curseur a bougé
     time.Sleep(50 * time.Millisecond)
@@ -75,33 +65,31 @@ func SimulateClick(hWnd syscall.Handle, x, y int) {
 
 // Start detects middle mouse clicks.
 func (wcs *WheelClickService) Start() {
-	wcs.stopChan = make(chan struct{})
-	go wcs.DetectMiddleClick()
+    wcs.stopChan = make(chan struct{})
+    go wcs.DetectMiddleClick()
 }
 
 // Stop stops detecting middle mouse clicks.
 func (wcs *WheelClickService) Stop() {
-	close(wcs.stopChan) // Signal to stop
+    close(wcs.stopChan) // Signal to stop
 }
 
-// DetectMiddleClick listens for mouse button presses.
+// DetectMiddleClick listens for mouse button presses using robotgo.
 func (wcs *WheelClickService) DetectMiddleClick() {
-	evChan := hook.Start()
-	defer hook.End()
-
-	for {
-		select {
-		case ev := <-evChan:
-			if ev.Kind == hook.MouseDown && ev.Button == 3 { // Check for middle mouse button
-				x, y := ev.X, ev.Y
-				log.Printf("Middle click detected at: (%d, %d)", x, y)
-				wcs.SendClickToDofusWindows(int(x), int(y)) // Convert to int
-			}
-		case <-wcs.stopChan:
-			log.Println("Stopping middle click detection")
-			return
-		}
-	}
+    for {
+        select {
+        case <-wcs.stopChan:
+            log.Println("Stopping middle click detection")
+            return
+        default:
+            if robotgo.AddMouse("mleft") { // Detect middle mouse click
+                x, y := robotgo.GetMousePos()
+                log.Printf("Middle click detected at: (%d, %d)", x, y)
+                wcs.SendClickToDofusWindows(x, y)
+            }
+            time.Sleep(50 * time.Millisecond) // Reduce CPU usage
+        }
+    }
 }
 
 // SendClickToDofusWindows finds all windows containing "Dofus" and sends a click.

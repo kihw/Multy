@@ -1,50 +1,28 @@
-# Use an Ubuntu-based image
-FROM ubuntu:20.04
+# Utilise une image Windows avec Go
+FROM golang:1.18-windowsservercore
 
-# Set environment variables for Go
-ENV GOROOT=/usr/local/go
-ENV GOPATH=/go
-ENV PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+# Installe Chocolatey et gcc via mingw
+RUN powershell -Command \
+    Set-ExecutionPolicy Bypass -Scope Process -Force; \
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; \
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); \
+    choco install mingw -y
 
-# Set noninteractive mode for apt-get
-ENV DEBIAN_FRONTEND=noninteractive
+# Ajoute gcc au PATH
+RUN setx PATH "%PATH%;C:\Program Files\mingw64\bin"
 
-# Install necessary packages
-RUN apt-get update && apt-get install -y \
-    wget \
-    libx11-dev \
-    libx11-xcb-dev \
-    libxkbcommon-dev \
-    libxkbcommon-x11-dev \
-    libxext-dev \
-    x11proto-core-dev \
-    x11proto-input-dev \
-    x11proto-record-dev \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Download and install Go 1.20 (or update to a newer stable version)
-RUN wget https://go.dev/dl/go1.18.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.18.linux-amd64.tar.gz && \
-    rm go1.18.linux-amd64.tar.gz
-
-# Set the working directory in the container
+# Définit le répertoire de travail
 WORKDIR /app
 
-# Copy the go.mod and go.sum files to download dependencies first
-COPY go.mod go.sum ./
-
-# Download the dependencies
-RUN go mod download
-
-# Copy the rest of the application code
+# Copie les fichiers de dépendances locaux et l'application dans le conteneur
 COPY . .
-RUN go get .
-# Build the Go application
-RUN go run main.go
+COPY vendor/ ./vendor/
 
-# Expose the port the app runs on (replace 8080 with your actual port if necessary)
+# Compile l'application avec les dépendances locales
+RUN go build -mod=vendor -o main.exe .
+
+# Expose le port de l'application
 EXPOSE 8080
 
-# Command to run the application
-CMD ["./main"]
+# Commande pour exécuter l'application
+CMD ["./main.exe"]
