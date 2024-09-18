@@ -1,5 +1,9 @@
 package main
 
+// #cgo CFLAGS: -IC:/opencv_gw/include
+// #cgo LDFLAGS: -LC:/opencv_gw/x64/mingw/lib -lopencv_core455 -lopencv_imgproc455 -lopencv_imgcodecs455 -lopencv_highgui455 -lopencv_videoio455
+import "C"
+
 import (
 	"log"
 
@@ -25,12 +29,12 @@ import (
 func main() {
 	r := gin.Default()
 
-	// Initialize services.
+	// Initialize services (without starting StartTurnService).
 	wheelClickService := &services.WheelClickService{}
 	shortcutService := services.NewShortcutService()
 	windowService := &services.WindowService{}
-	startTurnService := services.NewStartTurnService(windowService)
-
+	startTurnService := services.NewStartTurnService(windowService) // Pas de démarrage automatique
+	dofusCheckService := services.NewDofusCheckService(windowService)
 	// Initialize handlers with their respective services.
 	wheelClickHandler := &handlers.WheelClickHandler{
 		WheelClickService: wheelClickService,
@@ -52,7 +56,7 @@ func main() {
 	routes.SetupWindowRoutes(r, windowService)
 	routes.SetupWheelClickRoutes(r, wheelClickHandler)
 	routes.SetupStartTurnServiceRoutes(r, startTurnServiceHandler)
-
+	routes.SetupRoutesDofusCheck(r, dofusCheckService)
 	// Swagger route for API documentation.
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swagFiles.Handler))
 

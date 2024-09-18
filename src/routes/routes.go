@@ -42,9 +42,20 @@ func SetupShortcutRoutes(r *gin.Engine, hs *handlers.HandlersService) {
 
 func SetupWheelClickRoutes(r *gin.Engine, wh *handlers.WheelClickHandler) {
 	r.POST("/wheelclick/start", wh.StartWheelClick)
+	r.POST("/wheelclick/stop", wh.StopWheelClick)
 }
 
-func SetupStartTurnServiceRoutes(r *gin.Engine, handler *handlers.StartTurnServiceHandler) {
-	r.POST("/StartTurn/start", handler.Start)
-	r.POST("/StartTurn/stop", handler.Stop)
+func SetupStartTurnServiceRoutes(router *gin.Engine, handler *handlers.StartTurnServiceHandler) {
+	// Route pour démarrer le service
+	router.GET("/start-turn/start", handler.StartService)
+
+	// Route pour arrêter le service
+	router.GET("/start-turn/stop", handler.StopService)
+}
+
+func SetupRoutesDofusCheck(router *gin.Engine, dofusCheckService *services.DofusCheckService) {
+	dofusCheckHandler := handlers.NewDofusCheckHandler(dofusCheckService)
+
+	router.POST("/dofus-check/start", dofusCheckHandler.StartDofusCheck)
+	router.POST("/dofus-check/stop", dofusCheckHandler.StopDofusCheck)
 }

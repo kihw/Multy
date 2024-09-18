@@ -10,36 +10,6 @@ info:
   title: Multy API
   version: "1.0"
 paths:
-  /StartTurn/start:
-    post:
-      description: Démarre la détection des messages StartTurn
-      responses:
-        "200":
-          description: StartTurn detection started
-          schema:
-            type: string
-        "500":
-          description: Failed to start StartTurn detection
-          schema:
-            type: string
-      summary: Démarrer la détection du StartTurn
-      tags:
-      - Start Turn
-  /StartTurn/stop:
-    post:
-      description: Arrête la détection des messages StartTurn
-      responses:
-        "200":
-          description: StartTurn detection stopped
-          schema:
-            type: string
-        "500":
-          description: Failed to stop StartTurn detection
-          schema:
-            type: string
-      summary: Arrêter la détection du StartTurn
-      tags:
-      - Start Turn
   /focus/{keyword}:
     post:
       description: Met en avant une fenêtre qui contient un mot-clé spécifique dans
@@ -113,6 +83,58 @@ paths:
       summary: Unregister an existing hotkey
       tags:
       - Shortcut
+  /start-turn/start:
+    get:
+      consumes:
+      - application/json
+      description: Démarre le service pour écouter les événements d'une fenêtre spécifiée
+        par son titre
+      parameters:
+      - description: Titre de la fenêtre à surveiller
+        in: query
+        name: windowTitle
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service démarré avec succès
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Erreur si le service est déjà en cours ou si windowTitle est
+            manquant
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Démarrer le service de détection d'événements pour une fenêtre spécifique
+      tags:
+      - StartTurn
+  /start-turn/stop:
+    get:
+      description: Arrête le service d'écoute des événements sur une fenêtre
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service arrêté avec succès
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Erreur si le service n'est pas en cours
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Arrêter le service de détection d'événements
+      tags:
+      - StartTurn
   /wheelclick/start:
     post:
       description: Listens for middle mouse clicks and triggers click simulation on

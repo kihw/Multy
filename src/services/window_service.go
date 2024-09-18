@@ -2,16 +2,28 @@ package services
 
 import (
 	"fmt"
-	"image"
-	"image/color"
 	"log"
 	"strings"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+var (
+	procAttachThreadInput        = user32.NewProc("AttachThreadInput")
+	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
+	procSetWindowPos             = user32.NewProc("SetWindowPos")
 )
 
 const (
-	SW_RESTORE = 9
+	SW_RESTORE     = 9
+	SW_SHOW        = 5
+	HWND_TOP       = 0
+	SWP_NOSIZE     = 0x0001
+	SWP_NOMOVE     = 0x0002
+	SWP_SHOWWINDOW = 0x0040
 )
 
 // WindowService est le service qui interagit avec les fenêtres sur Windows.
@@ -74,8 +86,29 @@ func (ws *WindowService) FocusWindowWithTitle(keyword string) error {
 
 		if strings.Contains(windowText, keyword) {
 			log.Printf("Found matching window: '%s'", windowText) // Log when a match is found
+
+			// Restore the window if minimized
 			procShowWindow.Call(uintptr(hwnd), SW_RESTORE)
+
+			// Get the thread ID of the foreground window
+			fgWindow, _, _ := procGetForegroundWindow.Call()
+			fgThreadID, _, _ := procGetWindowThreadProcessId.Call(fgWindow, 0)
+
+			// Get the thread ID of the target window
+			targetThreadID, _, _ := procGetWindowThreadProcessId.Call(uintptr(hwnd), 0)
+
+			// Attach the foreground thread and the target window's thread
+			procAttachThreadInput.Call(fgThreadID, targetThreadID, 1)
+
+			// Bring the window to the top of the Z-order
+			procSetWindowPos.Call(uintptr(hwnd), HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_SHOWWINDOW)
+
+			// Set the window as the foreground window
 			procSetForegroundWindow.Call(uintptr(hwnd))
+
+			// Detach the threads
+			procAttachThreadInput.Call(fgThreadID, targetThreadID, 0)
+
 			found = true
 			return 0 // Stop enumeration
 		}
@@ -91,104 +124,50 @@ func (ws *WindowService) FocusWindowWithTitle(keyword string) error {
 		return fmt.Errorf("erreur lors de l'énumération des fenêtres: %v", err)
 	}
 
+	if !found {
+		return fmt.Errorf("aucune fenêtre trouvée avec le mot-clé: %s", keyword)
+	}
+
+	log.Println("Fenêtre mise en avant avec succès")
 	return nil
 }
 
-func (ws *WindowService) CaptureWindow(hwnd syscall.Handle) image.Image {
-    user32 := syscall.NewLazyDLL("user32.dll")
-    gdi32 := syscall.NewLazyDLL("gdi32.dll")
+// FindWindowByPartialTitle cherche une fenêtre qui contient un mot-clé dans son titre.
+func (ws *WindowService) FindWindowByPartialTitle(partialTitle string) (windows.Handle, error) {
+	var hwndFound windows.Handle
+	enumWindowsCallback := syscall.NewCallback(func(hwnd syscall.Handle, lParam uintptr) uintptr {
+		var buf [256]uint16
+		procGetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		windowText := syscall.UTF16ToString(buf[:])
 
-    getDC := user32.NewProc("GetDC")
-    releaseDC := user32.NewProc("ReleaseDC")
-    getClientRect := user32.NewProc("GetClientRect")
+		if strings.Contains(windowText, partialTitle) {
+			hwndFound = windows.Handle(hwnd) // Conversion explicite
+			return 0                         // Stop enumeration, car la fenêtre est trouvée
+		}
+		return 1 // Continue enumeration
+	})
 
-    createCompatibleDC := gdi32.NewProc("CreateCompatibleDC")
-    createCompatibleBitmap := gdi32.NewProc("CreateCompatibleBitmap")
-    selectObject := gdi32.NewProc("SelectObject")
-    bitBlt := gdi32.NewProc("BitBlt")
-    deleteObject := gdi32.NewProc("DeleteObject")
+	ret, _, err := procEnumWindows.Call(enumWindowsCallback, 0)
+	if ret == 0 && hwndFound == 0 { // L'appel système a échoué ou aucune fenêtre n'a été trouvée
+		return 0, fmt.Errorf("erreur lors de l'énumération des fenêtres: %v", err)
+	}
 
-    // Obtenez le contexte de périphérique (DC) de la fenêtre
-    hdcWindow, _, _ := getDC.Call(uintptr(hwnd))
-    hdcMemDC, _, _ := createCompatibleDC.Call(hdcWindow)
+	if hwndFound == 0 { // Si aucune fenêtre n'est trouvée
+		return 0, windows.ERROR_NOT_FOUND
+	}
 
-    // Définissez les dimensions de l'image
-    var rect RECT 
-    getClientRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rect)))
-    width, height := int(rect.Right-rect.Left), int(rect.Bottom-rect.Top)
-
-    // Créez un bitmap compatible
-    hBitmap, _, _ := createCompatibleBitmap.Call(hdcWindow, uintptr(width), uintptr(height))
-    selectObject.Call(hdcMemDC, hBitmap)
-
-    // Copiez l'écran dans le bitmap
-    bitBlt.Call(
-        hdcMemDC,
-        0, 0,
-        uintptr(width), uintptr(height),
-        hdcWindow,
-        0, 0,
-        uintptr(0x00CC0020), // SRCCOPY
-    )
-
-    // Préparez une structure BITMAPINFO pour obtenir les pixels
-    var bi BITMAPINFO
-    bi.BmiHeader.BiSize = uint32(unsafe.Sizeof(bi.BmiHeader))
-    bi.BmiHeader.BiWidth = int32(width)
-    bi.BmiHeader.BiHeight = -int32(height) // top-down
-    bi.BmiHeader.BiPlanes = 1
-    bi.BmiHeader.BiBitCount = 32
-    bi.BmiHeader.BiCompression = BI_RGB
-
-    // Créez une image pour recevoir les pixels
-    img := image.NewRGBA(image.Rect(0, 0, width, height))
-
-    // Obtenez les pixels
-    gdi32.NewProc("GetDIBits").Call(
-        hdcMemDC,
-        hBitmap,
-        0, uintptr(height),
-        uintptr(unsafe.Pointer(&img.Pix[0])),
-        uintptr(unsafe.Pointer(&bi)),
-        DIB_RGB_COLORS,
-    )
-
-    // Nettoyez les ressources
-    deleteObject.Call(hBitmap)
-    deleteObject.Call(hdcMemDC)
-    releaseDC.Call(uintptr(hwnd), hdcWindow)
-
-    return img
+	return hwndFound, nil
 }
 
-// BITMAPINFOHEADER and BITMAPINFO structures
-type BITMAPINFOHEADER struct {
-    BiSize          uint32
-    BiWidth         int32
-    BiHeight        int32
-    BiPlanes        uint16
-    BiBitCount      uint16
-    BiCompression   uint32
-    BiSizeImage     uint32
-    BiXPelsPerMeter int32
-    BiYPelsPerMeter int32
-    BiClrUsed       uint32
-    BiClrImportant  uint32
+// GetForegroundWindow retrieves the handle of the window currently in the foreground.
+func (ws *WindowService) GetForegroundWindow() syscall.Handle {
+	hwnd, _, _ := procGetForegroundWindow.Call()
+	return syscall.Handle(hwnd)
 }
 
-type BITMAPINFO struct {
-    BmiHeader BITMAPINFOHEADER
-    BmiColors [1]color.RGBA
-}
-
-const (
-    BI_RGB         = 0
-    DIB_RGB_COLORS = 0
-)
-
-type RECT struct {
-    Left   int32
-    Top    int32
-    Right  int32
-    Bottom int32
+// GetWindowText retrieves the text of the specified window by its handle.
+func (ws *WindowService) GetWindowText(hwnd syscall.Handle) string {
+	var buf [256]uint16
+	procGetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return syscall.UTF16ToString(buf[:])
 }

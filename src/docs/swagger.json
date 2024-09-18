@@ -14,52 +14,6 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
-        "/StartTurn/start": {
-            "post": {
-                "description": "Démarre la détection des messages StartTurn",
-                "tags": [
-                    "Start Turn"
-                ],
-                "summary": "Démarrer la détection du StartTurn",
-                "responses": {
-                    "200": {
-                        "description": "StartTurn detection started",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to start StartTurn detection",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/StartTurn/stop": {
-            "post": {
-                "description": "Arrête la détection des messages StartTurn",
-                "tags": [
-                    "Start Turn"
-                ],
-                "summary": "Arrêter la détection du StartTurn",
-                "responses": {
-                    "200": {
-                        "description": "StartTurn detection stopped",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to stop StartTurn detection",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/focus/{keyword}": {
             "post": {
                 "description": "Met en avant une fenêtre qui contient un mot-clé spécifique dans son titre",
@@ -164,6 +118,82 @@
                         "description": "Failed to unregister shortcut",
                         "schema": {
                             "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/start-turn/start": {
+            "get": {
+                "description": "Démarre le service pour écouter les événements d'une fenêtre spécifiée par son titre",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "StartTurn"
+                ],
+                "summary": "Démarrer le service de détection d'événements pour une fenêtre spécifique",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Titre de la fenêtre à surveiller",
+                        "name": "windowTitle",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Service démarré avec succès",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Erreur si le service est déjà en cours ou si windowTitle est manquant",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/start-turn/stop": {
+            "get": {
+                "description": "Arrête le service d'écoute des événements sur une fenêtre",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "StartTurn"
+                ],
+                "summary": "Arrêter le service de détection d'événements",
+                "responses": {
+                    "200": {
+                        "description": "Service arrêté avec succès",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Erreur si le service n'est pas en cours",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
