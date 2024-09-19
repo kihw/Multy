@@ -3,7 +3,9 @@ package services
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"sync"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -16,15 +18,25 @@ var (
 	procRegisterShellHookWindow = user32.NewProc("RegisterShellHookWindow")
 	procRegisterWindowMessage   = user32.NewProc("RegisterWindowMessageW")
 	procPostQuitMessage         = user32.NewProc("PostQuitMessage")
+	procRegisterClassEx         = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx          = user32.NewProc("CreateWindowExW")
+	procDefWindowProc           = user32.NewProc("DefWindowProcW")
 )
 
 // Constants for Windows messages and shell hook messages
 const (
 	WM_NCACTIVATE = 0x0086
+	WM_DESTROY    = 0x0002
 
-	HSHELL_FLASH            = 0x8004
-	HSHELL_WINDOWACTIVATED  = 0x8006
-	HSHELL_WINDOWACTIVATION = 0x0006
+	HSHELL_HIGHBIT = 0x8000
+
+	HSHELL_WINDOWCREATED       = 1
+	HSHELL_WINDOWDESTROYED     = 2
+	HSHELL_ACTIVATESHELLWINDOW = 3
+	HSHELL_WINDOWACTIVATED     = 4
+	HSHELL_GETMINRECT          = 5
+	HSHELL_REDRAW              = 6
+	HSHELL_FLASH               = HSHELL_REDRAW
 )
 
 // MSG structure for Windows messages
@@ -41,9 +53,25 @@ type POINT struct {
 	X, Y int32
 }
 
+type WNDCLASSEX struct {
+	CbSize        uint32
+	Style         uint32
+	LpfnWndProc   uintptr
+	CbClsExtra    int32
+	CbWndExtra    int32
+	HInstance     windows.Handle
+	HIcon         windows.Handle
+	HCursor       windows.Handle
+	HbrBackground windows.Handle
+	LpszMenuName  *uint16
+	LpszClassName *uint16
+	HIconSm       windows.Handle
+}
+
 // StartTurnService monitors window events for a specific window
 type StartTurnService struct {
 	hwnd                windows.HWND
+	targetHwnd          windows.HWND
 	running             bool
 	mutex               sync.Mutex
 	windowTitle         string
@@ -70,7 +98,7 @@ func (sts *StartTurnService) Start(windowTitle string) error {
 		log.Println("Service is already running.")
 		return nil
 	}
-
+	sts.windowTitle = windowTitle
 	log.Printf("Starting service with window title: %s", windowTitle)
 
 	// Register WM_SHELLHOOKMESSAGE
@@ -81,30 +109,14 @@ func (sts *StartTurnService) Start(windowTitle string) error {
 	sts.WM_SHELLHOOKMESSAGE = wmShellHookMsg
 	log.Printf("Registered WM_SHELLHOOKMESSAGE: %d", wmShellHookMsg)
 
-	// Find the window by partial title
+	// Find the target window by partial title
 	log.Printf("Searching for window with title containing: %s", windowTitle)
-	hwnd, err := sts.windowSvc.FindWindowByPartialTitle(windowTitle)
+	hwndTarget, err := sts.windowSvc.FindWindowByPartialTitle(windowTitle)
 	if err != nil {
 		return fmt.Errorf("could not find window with title %s: %v", windowTitle, err)
 	}
-	log.Printf("Window found: HWND = %d", hwnd)
-
-	// Ensure the window handle is valid
-	if hwnd == 0 {
-		return fmt.Errorf("invalid HWND: %d", hwnd)
-	}
-
-	// Register the window to receive shell messages
-	log.Printf("Registering shell hook window for HWND: %d", hwnd)
-	err = registerShellHookWindow(windows.HWND(hwnd))
-	if err != nil {
-		return fmt.Errorf("failed to register shell hook window: %v", err)
-	}
-	log.Printf("Shell hook window successfully registered for HWND: %d", hwnd)
-
-	sts.hwnd = windows.HWND(hwnd)
-	sts.windowTitle = windowTitle
-	sts.running = true
+	log.Printf("Window found: HWND = %d", hwndTarget)
+	sts.targetHwnd = windows.HWND(hwndTarget)
 
 	// Start monitoring window events
 	go sts.monitorEvents()
@@ -114,6 +126,25 @@ func (sts *StartTurnService) Start(windowTitle string) error {
 
 // monitorEvents listens for Windows messages in a message loop
 func (sts *StartTurnService) monitorEvents() {
+	runtime.LockOSThread()
+
+	// Create message-only window
+	hwnd, err := createMessageOnlyWindow()
+	if err != nil {
+		log.Fatalf("failed to create message-only window: %v", err)
+	}
+
+	// Register shell hook window
+	log.Printf("Registering shell hook window for HWND: %d", hwnd)
+	err = registerShellHookWindow(hwnd)
+	if err != nil {
+		log.Fatalf("failed to register shell hook window: %v", err)
+	}
+	log.Printf("Shell hook window successfully registered for HWND: %d", hwnd)
+
+	sts.hwnd = hwnd
+	sts.running = true
+
 	var msg MSG
 	log.Println("Starting to monitor window messages")
 
@@ -156,31 +187,32 @@ func (sts *StartTurnService) handleMessage(msg *MSG) {
 func (sts *StartTurnService) handleShellHookMessage(wParam, lParam uintptr) {
 	log.Printf("Handling WM_SHELLHOOKMESSAGE with WParam=%d, LParam=%d", wParam, lParam)
 
-	switch wParam {
-	case HSHELL_FLASH:
-		log.Printf("Notification captured: A window has requested attention, lParam=%d", lParam)
+	// Extraire le code du message en masquant HSHELL_HIGHBIT
+	messageCode := uint32(wParam & ^uintptr(HSHELL_HIGHBIT))
+	log.Printf("Extracted message code: %d", messageCode)
 
+	if windows.HWND(lParam) != sts.targetHwnd {
+		log.Printf("Received shell hook message for a different window: %d", lParam)
+		return
+	}
+
+	switch messageCode {
 	case HSHELL_WINDOWACTIVATED:
-		log.Printf("Window state change detected, lParam=%d", lParam)
+		log.Printf("Target window activated, lParam=%d", lParam)
+		// Vous pouvez ajouter un traitement ici si nécessaire
 
-		// Compare the previous values to detect a loop or repetition
-		if sts.lastLParam == lParam && sts.lastWParam == wParam {
-			log.Printf("Repeated shell message detected for lParam=%d, ignoring...", lParam)
-			return
+	case HSHELL_REDRAW:
+		log.Printf("Notification captured: The target window has requested attention (HSHELL_REDRAW), lParam=%d", lParam)
+		// Appeler FocusWindowWithTitle pour mettre la fenêtre au premier plan
+		err := sts.windowSvc.FocusWindowWithTitle(sts.windowTitle)
+		if err != nil {
+			log.Printf("Failed to focus window: %v", err)
+		} else {
+			log.Println("Window focused successfully.")
 		}
-
-		// Handle window state changes specifically for WM_NCACTIVATE sequence
-		if sts.lastWMNCActivate {
-			log.Println("Window activated/deactivated sequence detected.")
-		}
-		sts.lastLParam = lParam
-		sts.lastWParam = wParam
-
-	case HSHELL_WINDOWACTIVATION:
-		log.Printf("Window activation/deactivation event detected, lParam=%d", lParam)
 
 	default:
-		log.Printf("Other shell event received: wParam=%d, lParam=%d", wParam, lParam)
+		log.Printf("Other shell event received: messageCode=%d, lParam=%d", messageCode, lParam)
 	}
 }
 
@@ -255,3 +287,56 @@ func translateMessage(msg *MSG) {
 func dispatchMessage(msg *MSG) {
 	procDispatchMessage.Call(uintptr(unsafe.Pointer(msg)))
 }
+
+// Create a message-only window
+func createMessageOnlyWindow() (windows.HWND, error) {
+	var className = windows.StringToUTF16Ptr("MessageOnlyWindowClass")
+
+	var wcex WNDCLASSEX
+	wcex.CbSize = uint32(unsafe.Sizeof(wcex))
+	wcex.LpfnWndProc = syscall.NewCallback(messageOnlyWndProc)
+	wcex.HInstance = windows.Handle(0)
+	wcex.LpszClassName = className
+
+	atom, _, err := procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wcex)))
+	if atom == 0 {
+		return 0, err
+	}
+
+	hwnd, _, err := procCreateWindowEx.Call(
+		0,
+		uintptr(unsafe.Pointer(className)),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		uintptr(HWND_MESSAGE), // Parent window
+		0,
+		0,
+		0,
+	)
+	if hwnd == 0 {
+		return 0, err
+	}
+
+	return windows.HWND(hwnd), nil
+}
+
+// Window procedure for the message-only window
+func messageOnlyWndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
+	switch msg {
+	case WM_DESTROY:
+		postQuitMessage(0)
+		return 0
+	default:
+		ret, _, _ := procDefWindowProc.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return ret
+	}
+}
+
+// Constants
+const (
+	HWND_MESSAGE = windows.Handle(^uintptr(2)) // Define HWND_MESSAGE as (HWND)-3
+)

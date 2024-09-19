@@ -3,6 +3,7 @@ package services
 import (
 	"log"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -99,4 +100,11 @@ func (dcs *DofusCheckService) deactivateWheelClick() {
 	log.Println("Deactivating wheel click service...")
 	dcs.isWheelClickActive = false
 	// Call the existing wheel click service to stop monitoring
+}
+func (ws *WindowService) GetForegroundWindow() syscall.Handle {
+	return GetForegroundWindow()
+}
+
+func (ws *WindowService) GetWindowText(hwnd syscall.Handle) string {
+	return GetWindowText(hwnd)
 }
